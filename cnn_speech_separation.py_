@@ -1,0 +1,182 @@
+# 2.4 python 为什么适合于深度学习 
+
+#   前文已经指出，当计算正向传播模型和反向传播模型时候，需要大量 for 循环进行训练，然而当进行深度学习时候如果代码中使用大量的 for 循环将会效率很低下，同时随着数据量的增加，越使用 for 循环越增加计算难度，所以必须使用向量法来减少 for 循环计算量。向量法来源已久，特别是随着深度学习机器学习的火热起来，向量化成为一个必备的要素，如果不使用向量法，算法将难以执行。现在简单介绍一下向量法实现原理。 向量法可以去掉显性的 for 循环，如果不去掉 for 循环，在大数据中计算得花大量计算时间。举个例子，在逻辑回归中如果计算 z = 𝑤 𝑇 𝑥 + 𝑏 ， w 、 x 都是列向量。如果使用 for 循环，代码如下： 
+# z=0 
+# for i in range(n_x) 
+#         z+=w[i]*x[i] 
+# z+=b 
+
+#   如果使用向量法，在 python 中只需要一行代码：z=np.dot(w,x)+b 在 python中实现，我们会发现，同样如上文所示的程序用非向量法的 for 循环方法需要 500毫秒，而使用向量法的方法只需要仅仅的 1.5 毫秒，非向量法需要花费相量法的300 多倍时间。所以如果有一个大的数据库进行训练，如果向量法需要一分钟运行，而非向量法就需要 5 个小时，足以见得差距，因此我们必须放弃非相量法而选择相量法。 
+#   差距如此之大的原因其实并不难理解，大规模的深度学习都是靠 GPU 实现的，其实理论上虽然 CPU 也有一样的功能，但是性能不太如 GPU 一样强劲罢了，原因是CPU和GPU都是通过并行化方法进行运算和处理，英文名字叫做SIMD，即一个指令能执行多维数据，而 python 可以利用 GPU 进行并行运算，加快了运算效率，然而 Matlab 却并没有这样功能，所以这就是 python 非常适合深度学习的原因。 
+
+# 2.5 python 实现语音分离的关键代码和步骤 
+#   既然如此，为何如今却都是使用 Matlab 进行语音分离而不是 python 进行语音分离，原因其实很简单，因为 Matlab 中所有需要用到的库函数比如取汉明窗函数，读取语音函数，Matlab 工具箱已经帮助全部写好了，然而 python 中目前还没有这样的代码，所以我们必须要全部自己手写，就非常的困难。不过，经历过重重困难之后，我还是完美的完成了代码。现在给出一些用 python 写好的关键的 Matlab 没有的但在 python 中实现的值得注意的代码。 
+# （1）读取语音信号在 Matlab 中只需要短短几行： 
+# for ii=1:265 
+#         path = ['M2_',num2str(ii),'.wav']; 
+#         [male,fs]=wavread(path); 
+#         maleSignal=[maleSignal;male]; 
+#         path = ['F2_',num2str(ii),'.wav']; 
+#         [female,fs]=wavread(path); 
+#         femaleSignal=[femaleSignal;female]; 
+# end 
+#   而在 python 中就需要代码比较多，主要原因是 python 中没有一个读取语音的完整的库函数 wavread 函数所以需要我们自己来进行编写： 
+def waveread():
+    for x in range(265): 
+        y, sr = librosa.load('male/M2_'+str(x+1)+'.wav', sr=None) 
+        y = (np.array(y)).reshape(1, len(y)) 
+        if x == 0: 
+            malesignal = y 
+        else: 
+            malesignal = np.c_[malesignal, y] 
+        y, sr = librosa.load('female/F2_'+str(x+1)+'.wav', sr=None) 
+        y = (np.array(y)).reshape(1, len(y)) 
+        if x == 0: 
+            femalesignal = np.array(y) 
+        else: 
+            femalesignal = np.c_[femalesignal, y] 
+return malesignal, femalesignal
+
+# （2）输出信号在 Matlab 中也已经由库函数写好了，只需要一行就可以解决： 
+# wavwrite(mix,fs,'mix.wav'); 
+# 然而在 python 中也由于没有库函数，所以同样我们需要自己手动编写： 
+def wavwrite():
+    nchannels = 1 
+    sampwidth = 2 
+    outwave = wave.open('mixedsignal.wav', 'wb') 
+    data_size = min(malesignal.shape[1], femalesignal.shape[1]) 
+    framerate = sr 
+    nframes = data_size 
+    comptype = "NONE" 
+    compname = "not compressed" 
+    for v in range(data_size): 
+            outwave.writeframes(struct.pack('h', int((malesignal[0][v] + 
+    femalesignal[0][v]) * 64000 / 4))) 
+    outwave.close() 
+
+    
+# 值得注意的是这里有很多细节需要注意，比如读取函数需要选择正确的窗长度帧长度和正确的信号长度，否则很容易出错。 
+# （3）hamming 窗函数在 Matlab 中也已经由前人完成了，所以只需要一行代码调用即可： 
+# maleSignal = enframe(maleSignal,hamming(256,'periodic'),128); 
+# 然而 python 大多数人并没有用它作为语音方向使用，所以窗函数 python 目前没有人实现，我们需要根据原理自己手动编写： 
+def enframe(inputsignal, nw): 
+    signal_length = inputsignal.shape[1] 
+    inc = int(nw/2) 
+    nf = int(np.floor((1.0*signal_length-nw+inc)/inc)) 
+    indf = np.array(range(0, nf*inc, inc)) 
+    indf = indf.reshape(nf, 1) 
+    inds = np.array(range(0, nw, 1)) 
+    inds = inds.reshape(1, nw) 
+    temp1 = np.tile(indf, (1, nw)) 
+    temp2 = np.tile(inds, (nf, 1)) 
+    temp3 = temp1+temp2 
+    frame = np.zeros((temp3.shape[0], temp3.shape[1]), dtype=float) 
+    for i in range(temp3.shape[0]): 
+        for j in range(temp3.shape[1]): 
+            frame[i][j] = inputsignal[0, temp3[i][j]] 
+    hamming1 = signal.hamming(nw) 
+    hamming1 = hamming1.reshape(1, nw) 
+    restuctsignal = frame*hamming1 
+return restuctsignal 
+ 
+# （4）同理，加完窗函数后还需要取消加窗，在 Matlab 同样只需要一行代码： 
+# inputsignal=overlapadd(inputMatrix,hamming(256,'periodic'),128); 
+# python 中却同样需要自己手动编写： 
+def overlappadd(inputsignal, nw): 
+    len_r = len(inputsignal) 
+    len_l = nw 
+    hamming1 = signal.hamming(nw) 
+    hamming1 = hamming1.reshape(1, nw) 
+    restuctsignal = inputsignal /hamming1 
+    inc = int(nw/2) 
+    nf = len_r*inc-inc+nw 
+    indf = np.array(range(0, len_r*inc, inc)) 
+    indf = indf.reshape(len_r, 1) 
+    inds = np.array(range(0, nw, 1)) 
+    inds = inds.reshape(1, nw) 
+    temp1 = np.tile(indf, (1, nw)) 
+    temp2 = np.tile(inds, (len_r, 1)) 
+    temp3 = temp1+temp2 
+    frame = np.zeros((nf, 1), dtype=float) 
+    for i in range(len_r): 
+        for j in range(len_l): 
+            frame[temp3[i][j]] = restuctsignal[i][j] 
+return frame.T 
+# （5）同样，在 matlab 中求信噪比只需要一行代码调用已有的函数即可： 
+# signal2SNR = estimate_SNR1(constructsignal,inputsignal) 
+# 然而 python 主要用于深度学习图像识别大数据分析等别的方向而不是语音方向，所以没有求解信噪比的函数，我们也需要手动编写，代码如下： 
+def SNR(testinputsignal1,testconstructsignal1)
+    meantestinputsignal = np.mean(testinputsignal1) 
+    testinputsignal1 = testinputsignal1 - meantestinputsignal 
+    testinputmax = np.max(abs(testinputsignal1)) 
+    testsnrinputsignal = testinputsignal1/testinputmax 
+    meantestconstructsignal = np.mean(testconstructsignal1) 
+    testconstructsignal1 = testconstructsignal1 - meantestconstructsignal 
+    testconstructmax = np.max(abs(testconstructsignal1)) 
+    testsnrconstructsignal = testconstructsignal1/testconstructmax 
+    error = testsnrinputsignal - testsnrconstructsignal 
+    temp1 = np.power(testsnrinputsignal, 2) 
+    temp2 = np.power(error, 2) 
+    temp3 = np.sum(temp1) 
+    temp4 = np.sum(temp2) 
+    SNR = 10 * math.log(temp3 / temp4) 
+return SNR
+
+
+
+# 总之，利用 python 进行语音分离的代码流程如下： 
+# 先读取信号，然后对信号进行切割分为训练部分的信号和测试部分的信号： 
+    trainmaleframesignal = (np.array(malesignal[0][0:3840128])).reshape(1, -1) 
+    trainmaleframesignal1 = enframe(trainmaleframesignal, 256) 
+    trainfemaleframesignal = (np.array(femalesignal[0][0:3840128])).reshape(1, -1) 
+    trainfemaleframesignal1 = enframe(trainfemaleframesignal, 256) 
+    testmaleframesignal = (np.array(malesignal[0][3840129:4147457])).reshape(1, -1) 
+    testmaleframesignal1 = enframe(testmaleframesignal, 256) 
+    testfemaleframesignal = (np.array(femalesignal[0][3840129:4147457])).reshape(1, -1) 
+    testfemaleframesignal1 = enframe(testfemaleframesignal, 256) 
+# 接着，我们分别对训练部分的信号和测试部分的信号进行傅里叶变换，读取傅里叶变换之后的幅值和相位以及幅值的最大值，保存它们以便后面进行训练，如下面代码所示：
+    for x in range(30000): 
+        temp = trainmaleframesignal1[x] 
+        tempfft = np.fft.fft(temp) 
+        tempphase = np.angle(tempfft) 
+        trainphasemale.append(tempphase) 
+        tempmax = abs(tempfft) 
+        tempmax = np.max(tempmax) 
+        trainmaxmale.append(tempmax) 
+        temp = abs(tempfft) / tempmax 
+        trainmale.append(temp) 
+        temp2 = trainmaleframesignal1[x] + trainfemaleframesignal1[x] 
+        temp2fft = np.fft.fft(temp2) 
+        temp2phase = np.angle(temp2fft) 
+        temp2max = abs(temp2fft) 
+        temp2max = np.max(temp2max) 
+        temp = abs(temp2fft) / temp2max 
+    trainmixed.append(temp2) 
+# 接着，我们可以选用 tensorflow 或者 keras 框架进行训练，个人推荐新手或者研究者而不是工业生产人员的话使用 keras 框架进行训练，它底层是使用Python 撰写的简单模型,因此不需要再安装别的软件或者插件就可以运行，而且后端使用了 tensorflow，CNTK 或者 Theano，不仅减少了代码复杂度，而且降低了错误率提高了正确率。而且非常容易理解，对用户友好，并且具有高度的模块化和可拓展性，并且同时支持深度的神经网络 DNN 和 CNN 和 RNN 以及它们的结合，基本满足的初学者和普通的研究者而不是工业生产者的需求。 
+# Keras 框架对用户十分友好，它不同于 tensorflow 主要用于工业生产和真现实环境，它是为了用户设计的而不是为了机器设计的，它将用户体验放在第一位。Keras 减少一些不必要的代码，减少了错误来源，并且提供了简单方便地 API，相比于 tensorflow，大幅度减少了用户编写代码的数据量，并且当用户发现错误时可以得到很好的错误检查。 
+# Keras 非常方便进行模块化处理，它可以由独立的完全可以自己设置的一个一个单独的模块或者说对象函数构成整体的框架。可以很方便的对网络的层的数目，代价函数，初始化参数，激活函数，正则化参数等等一系列的方法分别进行方便的处理，然后合并起来变成新的模块。 
+# Keras 框架也很方便进行扩展，虽然 keras 提供了很多已有的框架函数，但如果对于 keras 提供的框架不满意，还可以自己很方便的进行编写。Keras 是基于 python 实现的，不用再安装新的插件或者 ide，非常方便进行查看源代码，易于调试和扩展。 
+# 所以，到  2018  年中期，Keras  已经拥有不止  250,000  名的用户。与其他任何深度学习框架相比，Keras  在行业和研究领域的应用率更高。 Keras 框架越来越火爆，它已经运用于 netflix,uber 等大公司的开发项目上，
+# 所以我们也选择 keras 而不是 tensorflow 进行编写，代码如下： 
+    model.add(Dense(1024, activation='sigmoid', input_dim=256)) 
+    model.add(Dense(1024, activation='sigmoid')) 
+    model.add(Dense(256, activation='sigmoid'))  
+    ADAM  =  keras. optimizers. Adam(lr = 0.001, beta_1 = 0.9, beta_2= 0.999, epsilon = None, decay = 0.0, amsgrad = False) 
+    model. compile(optimizer = ADAM, loss = 'mean_squared_error', metrics= ['accuracy'])  
+    model.fit(X_train, Y_train, epochs=200, batch_size=256, verbose=2) 
+# 其中最重要的即加粗的部分，就是算法的核心部分。具体参数的选择可以参考 keras 的中文文档里有详细的说明。 
+# 训练完成之后我们将要测试的数据进行预测： 
+    Y_pred = model.predict(X_test, batch_size=256, verbose=0, steps=None) 
+# 然后，我们将预测的数据进行傅里叶反变换，然后用前面已经保存好的幅值的最大值和相位求解，代码如下： 
+    testtempinputsignal = testmale[x] * testmaxmale[x] 
+        testtempinputphase = testphasemale[x] 
+        testtempinputphase = testtempinputphase.reshape(1, 256) 
+        temp = 1j * testtempinputphase[:] 
+        inputz = testtempinputsignal * np.power(math.e, temp) 
+        inputy = (np.fft.ifft(inputz)).real 
+        inputy = inputy.reshape(1, 256) 
+        if x == 0: 
+            testinputsignal = np.array(inputy) 
+        else: 
+            testinputsignal = np.r_[testinputsignal, inputy] 
+# 最后输出测试信号和计算信噪比即可。 
